@@ -50,10 +50,9 @@ jobs:
     - name: Install Swashbuckle CLI
       run: dotnet tool install --global Swashbuckle.AspNetCore.Cli --version 5.6.3
 
-    - name: Add .NET tools to PATH
-      run: |
-        echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
-      shell: bash
+    - name: Add .NET tools to PATH (Windows)
+      run: echo "%USERPROFILE%\\.dotnet\\tools" >> %GITHUB_PATH%
+      shell: cmd
 
     - name: Verificar que el DLL y publicación existen
       run: |
@@ -61,6 +60,7 @@ jobs:
         dir ${{ env.PUBLISH_FOLDER }}
         echo "¿Existe el DLL?"
         if (!(Test-Path "${{ env.API_DLL_PATH }}")) { throw "❌ No se encontró el archivo API.dll" }
+      shell: pwsh
 
     - name: Generate Open API Specification Document
       run: dotnet swagger tofile --no-startup --output ${{ env.SWAGGER_OUTPUT }} ${{ env.API_DLL_PATH }} ${{ env.API_VERSION }} --basepath /api
