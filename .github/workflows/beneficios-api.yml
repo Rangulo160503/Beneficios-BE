@@ -1,80 +1,95 @@
-name: Build and deploy .NET Core application to Web App beneficios-api with API Management Service APIBeneficios-API
+name: Build and deploy Beneficios API to Azure
+
 on:
   push:
     branches:
-    - main
+      - main
+
 env:
   AZURE_WEBAPP_NAME: beneficios-api
-  AZURE_WEBAPP_PACKAGE_PATH: publish
-  AZURE_APIM_RESOURCE_PATH: /BeneficosAPI
-  AZURE_APIM_RESOURCEGROUP: BeneficiosAPI
-  AZURE_APIM_SERVICENAME: APIBeneficios
+  AZURE_RESOURCE_GROUP: BeneficiosAPI
+  AZURE_APIM_NAME: APIBeneficios
   AZURE_APIM_API_ID: API
-  AZURE_APIM_APPSERVICEURL: https://beneficios-api-f2a7cuhrgsgmbvg6.canadacentral-01.azurewebsites.net
-  SWASHBUCLE_ASPNET_CORE_CLI_PACKAGE_VERSION: 5.6.3
-  SWASHBUCKLE_DOTNET_CORE_VERSION: 3.1.x
-  API_IMPORT_SPECIFICATION_PATH: publish\swagger.json
-  API_IMPORT_DLL: publish\API.dll
-  API_IMPORT_VERSION: v1
+  AZURE_APIM_PATH: /BeneficosAPI
+  AZURE_APP_URL: https://beneficios-api.azurewebsites.net
+  API_VERSION: v1
   CONFIGURATION: Release
-  DOTNET_CORE_VERSION: 9.0.x
-  WORKING_DIRECTORY: API
+  DOTNET_VERSION: 9.0.x
+  PROJECT_FOLDER: API
+  PUBLISH_FOLDER: API/publish
+  API_DLL_PATH: API/publish/API.dll
+  SWAGGER_OUTPUT: API/publish/swagger.json
+
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Setup .NET SDK
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: ${{ env.DOTNET_CORE_VERSION }}
-    - name: Setup SwashBuckle .NET Core
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.SWASHBUCKLE_DOTNET_CORE_VERSION }}
-    - name: Restore
-      run: dotnet restore ${{ env.WORKING_DIRECTORY }}
-    - name: Build
-      run: dotnet build ${{ env.WORKING_DIRECTORY }} --configuration ${{ env.CONFIGURATION }} --no-restore
-    - name: Test
-      run: dotnet test ${{ env.WORKING_DIRECTORY }} --no-build
-    - name: Publish
-      run: dotnet publish ${{ env.WORKING_DIRECTORY }} --configuration ${{ env.CONFIGURATION }} --no-build --output ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
-    - name: Install Swashbuckle CLI .NET Global Tool
-      run: dotnet tool install --global Swashbuckle.AspNetCore.Cli --version ${{ env.SWASHBUCLE_ASPNET_CORE_CLI_PACKAGE_VERSION }}
-      working-directory: ${{ env.WORKING_DIRECTORY }}
-    - name: Debug - Verificar contenido de la carpeta 'publish'
-      run: dir ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
-      working-directory: ${{ env.WORKING_DIRECTORY }}
+        dotnet-version: ${{ env.DOTNET_VERSION }}
 
-    - name: Generate Open API Specification Document
-      run: swagger tofile --no-startup --output "${{ env.API_IMPORT_SPECIFICATION_PATH }}" "${{ env.API_IMPORT_DLL }}" "${{ env.API_IMPORT_VERSION }}" --basepath /api
-      working-directory: ${{ env.WORKING_DIRECTORY }}
-    - name: Publish Artifacts
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.PROJECT_FOLDER }}
+
+    - name: Build project
+      run: dotnet build ${{ env.PROJECT_FOLDER }} --configuration ${{ env.CONFIGURATION }} --no-restore
+
+    - name: Run tests
+      run: dotnet test ${{ env.PROJECT_FOLDER }} --no-build
+
+    - name: Publish app
+      run: dotnet publish ${{ env.PROJECT_FOLDER }} --configuration ${{ env.CONFIGURATION }} --no-build --output ${{ env.PUBLISH_FOLDER }}
+
+    - name: Install Swashbuckle CLI
+      run: dotnet tool install --global Swashbuckle.AspNetCore.Cli --version 5.6.3
+
+    - name: Generate Swagger
+      run: swagger tofile --no-startup --output ${{ env.SWAGGER_OUTPUT }} ${{ env.API_DLL_PATH }} ${{ env.API_VERSION }} --basepath /api
+
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: webapp
-        path: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+        path: ${{ env.PUBLISH_FOLDER }}
+
   deploy:
     runs-on: windows-latest
     needs: build
+
     steps:
-    - name: Download artifact from build job
+    - name: Download artifact
       uses: actions/download-artifact@v4
       with:
         name: webapp
-        path: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
-    - name: Azure Login
+        path: ${{ env.PUBLISH_FOLDER }}
+
+    - name: Azure login
       uses: azure/login@v2
       with:
         creds: ${{ secrets.APIBeneficios_SPN }}
-    - name: Deploy to Azure WebApp
+
+    - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v2
       with:
         app-name: ${{ env.AZURE_WEBAPP_NAME }}
-        package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+        package: ${{ env.PUBLISH_FOLDER }}
+
     - name: Import API into Azure API Management
-      run: az apim api import --path "${{ env.AZURE_APIM_RESOURCE_PATH }}" --resource-group "${{ env.AZURE_APIM_RESOURCEGROUP }}" --service-name "${{ env.AZURE_APIM_SERVICENAME }}" --api-id "${{ env.AZURE_APIM_API_ID }}" --service-url "${{ env.AZURE_APIM_APPSERVICEURL }}" --specification-path "${{ env.API_IMPORT_SPECIFICATION_PATH }}" --specification-format OpenApi --subscription-required false
-    - name: logout
       run: >
-        az logout
+        az apim api import \
+          --path "${{ env.AZURE_APIM_PATH }}" \
+          --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+          --service-name "${{ env.AZURE_APIM_NAME }}" \
+          --api-id "${{ env.AZURE_APIM_API_ID }}" \
+          --service-url "${{ env.AZURE_APP_URL }}" \
+          --specification-path "${{ env.SWAGGER_OUTPUT }}" \
+          --specification-format OpenApi \
+          --subscription-required false
+
+    - name: Logout
+      run: az logout
