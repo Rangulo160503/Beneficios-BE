@@ -51,7 +51,9 @@ jobs:
       run: dotnet tool install --global Swashbuckle.AspNetCore.Cli --version 5.6.3
 
     - name: Add .NET tools to PATH
-      run: echo "$env:USERPROFILE\.dotnet\tools" | Out-File -Append -FilePath $env:GITHUB_PATH
+      run: |
+        echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+      shell: bash
 
     - name: Verificar que el DLL y publicación existen
       run: |
