@@ -28,7 +28,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup .NET SDK
+    - name: Setup .NET SDKs (9.0 and 3.0)
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: |
@@ -50,8 +50,11 @@ jobs:
     - name: Install Swashbuckle CLI
       run: dotnet tool install --global Swashbuckle.AspNetCore.Cli --version 5.6.3
 
-    - name: Generate Swagger
-      run: swagger tofile --no-startup --output ${{ env.SWAGGER_OUTPUT }} ${{ env.API_DLL_PATH }} ${{ env.API_VERSION }} --basepath /api
+    - name: Verificar que el DLL y publicación existen
+      run: dir ${{ env.PUBLISH_FOLDER }}
+
+    - name: Generate Open API Specification Document
+      run: dotnet swagger tofile --no-startup --output ${{ env.SWAGGER_OUTPUT }} ${{ env.API_DLL_PATH }} ${{ env.API_VERSION }} --basepath /api
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
